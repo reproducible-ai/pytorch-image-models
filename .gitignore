@@ -119,3 +119,24 @@ Testing notebook.ipynb
 /*.png
 /*.zip
 /*.tar.*
+# roar state — the generated setup stage runs `roar init`, which creates
+# .roar/. Without this rule the worktree goes dirty and the FIRST PAID
+# `roar run` refuses to execute ("Run blocked: untracked files").
+.roar/
+# --- reproduction outputs (scaffold_row.py: mnist rule) ---
+# file-pattern ignore + tracked .gitkeep so each dir survives a clean
+# checkout and roar keeps the outputs in lineage. NEVER dir-ignore.
+data/*
+!data/.gitkeep
+metrics/*
+!metrics/.gitkeep
+# Upstream dir-ignores `output/` (line ~103). A dir-ignore stops git descending,
+# so a nested `!output/<exp>/.gitkeep` can never match. Re-admit the directories
+# first, then file-pattern ignore their contents.
+!output/
+output/*
+!output/resnet18-cifar10/
+output/resnet18-cifar10/*
+!output/resnet18-cifar10/.gitkeep
+# local treqs binding — machine-specific, not part of the recipe
+.treqs/config.toml

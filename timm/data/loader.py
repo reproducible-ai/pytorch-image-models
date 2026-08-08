@@ -423,7 +423,11 @@ def create_loader(
         collate_fn=collate_fn,
         pin_memory=pin_memory,
         worker_init_fn=partial(_worker_init, worker_seeding=worker_seeding),
-        persistent_workers=persistent_workers
+        # torch.utils.data.DataLoader raises
+        #   ValueError: persistent_workers option needs num_workers > 0
+        # so the documented `train.py -j 0` / `validate.py -j 0` (single-process
+        # loading) is unusable without this guard.
+        persistent_workers=persistent_workers and num_workers > 0,
     )
     if scheduled_batching:
         loader_args['batch_sampler'] = ScheduledBatchSampler(
