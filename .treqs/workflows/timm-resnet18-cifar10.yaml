@@ -39,17 +39,32 @@ setup:
     # linux x86_64 wheel's digest against the index before installing it.
     curl -sS https://test.pypi.org/pypi/roar-cli/0.4.4rc2/json -o /tmp/roar_meta.json
     python -c "import json,sys; d=json.load(open('/tmp/roar_meta.json')); g={f['filename']: f['digests']['sha256'] for f in d['urls']}; print(json.dumps(g, indent=1)); want='3677618d4c42d66143baf42912c8ed932f9706d5511d032bb2898fda6a465471'; sys.exit(0 if want in g.values() else 1)"
+    # `uv` is NOT on PATH on this AMI. Look in the usual per-user bin dirs first,
+    # and bootstrap it if it genuinely is not installed.
+    echo "user=$(id -un) home=$HOME"
+    command -v uv >/dev/null || export PATH="$HOME/.local/bin:/root/.local/bin:/usr/local/bin:$PATH"
+    command -v uv >/dev/null || { curl -LsSf https://astral.sh/uv/install.sh | sh; export PATH="$HOME/.local/bin:$PATH"; }
+    uv --version
     # Install under the SAME interpreter version the workload runs on, or host
     # packages can shadow the recorded pins. --with huggingface-hub because roar
     # declares it only under a `dev` extra and `roar put ... hf://` would otherwise
     # die *after* every traced step has already succeeded.
+    # --index-strategy unsafe-best-match is REQUIRED: uv gives --extra-index-url
+    # first-match priority and otherwise reports "no version of roar-cli==0.4.4rc2".
     uv tool install --python "$(python -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')" \
       --force --with huggingface-hub \
       --index-url https://test.pypi.org/simple/ \
       --extra-index-url https://pypi.org/simple/ \
       --index-strategy unsafe-best-match \
       roar-cli==0.4.4rc2
-    sudo ln -sf /root/.local/bin/roar /usr/local/bin/roar
+    # The treqs agent shells out to a bare `roar` after the run WITHOUT this
+    # stage's PATH, so the executable has to exist at /usr/local/bin/roar.
+    ROAR_BIN="$(command -v roar || true)"
+    test -n "$ROAR_BIN" || ROAR_BIN="$HOME/.local/bin/roar"
+    test -x "$ROAR_BIN" || ROAR_BIN=/root/.local/bin/roar
+    echo "roar installed at $ROAR_BIN"
+    sudo ln -sf "$ROAR_BIN" /usr/local/bin/roar
+    hash -r
     roar --version
     test "$(roar --version | grep -o '[0-9][^ ]*$')" = "0.4.4rc2" || { echo "WRONG ROAR: $(roar --version)"; exit 1; }
     roar tracer use preload
