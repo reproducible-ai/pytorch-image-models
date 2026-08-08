@@ -135,8 +135,8 @@ metrics/*
 # first, then file-pattern ignore their contents.
 !output/
 output/*
-!output/resnet18-cifar10/
-output/resnet18-cifar10/*
-!output/resnet18-cifar10/.gitkeep
+!output/resnet18-fashion-mnist/
+output/resnet18-fashion-mnist/*
+!output/resnet18-fashion-mnist/.gitkeep
 # local treqs binding — machine-specific, not part of the recipe
 .treqs/config.toml

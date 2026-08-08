@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download the CIFAR-10 dataset used by this reproduction row.
+"""Download the Fashion-MNIST dataset used by this reproduction row.
 
 Kept as its own pipeline stage (rather than a side effect of `train.py
 --dataset-download`) so the dataset fetch is a recorded step with its own
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import FashionMNIST
 
 
 def main() -> int:
@@ -22,8 +22,8 @@ def main() -> int:
     args = ap.parse_args()
 
     for split, is_train in (("train", True), ("validation", False)):
-        ds = CIFAR10(root=args.data_dir, train=is_train, download=True)
-        print(f"cifar10 {split}: {len(ds)} examples -> {args.data_dir}")
+        ds = FashionMNIST(root=args.data_dir, train=is_train, download=True)
+        print(f"fashion-mnist {split}: {len(ds)} examples -> {args.data_dir}")
     return 0
 
 
