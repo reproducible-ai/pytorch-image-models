@@ -83,7 +83,7 @@ train:
   command: |
     export PATH=/opt/pytorch/bin:$PATH
     export TRACKIO_SPACE_ID=reproducible-ai/experiments PYTHONUNBUFFERED=1
-    roar run -n train --wandb-to-trackio -- python train.py --data-dir ./data --dataset torch/fashion_mnist --train-split train --val-split validation --model resnet18 --num-classes 10 --in-chans 1 --img-size 28 --mean 0.2860 --std 0.3530 --batch-size 256 --epochs 5 --warmup-epochs 0 --opt sgd --lr 0.05 --weight-decay 5e-4 --sched cosine --workers 0 --seed 42 --checkpoint-hist 1 --output ./output --experiment resnet18-fashion-mnist
+    roar run -n train --wandb-to-trackio -- python train.py --data-dir ./data --dataset torch/fashion_mnist --train-split train --val-split validation --model resnet18 --num-classes 10 --in-chans 1 --img-size 28 --mean 0.2860 --std 0.3530 --batch-size 256 --epochs 5 --warmup-epochs 0 --opt sgd --lr 0.05 --weight-decay 5e-4 --sched cosine --workers 0 --seed 42 --checkpoint-hist 5 --output ./output --experiment resnet18-fashion-mnist
   trace: off
 
 evaluate:
