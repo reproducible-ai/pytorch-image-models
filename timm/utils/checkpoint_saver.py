@@ -35,6 +35,7 @@ class CheckpointSaver:
             max_history=10,
             unwrap_fn=unwrap_model,
             task=None,
+            save_last_only=False,
     ):
 
         # objects to save state_dicts of
@@ -62,6 +63,7 @@ class CheckpointSaver:
         self.decreasing = decreasing  # a lower metric is better if True
         self.cmp = operator.lt if decreasing else operator.gt  # True if lhs better than rhs
         self.max_history = max_history
+        self.save_last_only = save_last_only
         self.unwrap_fn = unwrap_fn
         assert self.max_history >= 1
 
@@ -129,6 +131,17 @@ class CheckpointSaver:
         last_save_path = os.path.join(self.checkpoint_dir, 'last' + self.extension)
         self._save(tmp_save_path, epoch, metric)
         self._replace(tmp_save_path, last_save_path)
+
+        if self.save_last_only:
+            # Leave a single checkpoint file. The per-epoch `checkpoint-<n>` and
+            # `model_best` copies below are hardlinks to `last`, i.e. extra names
+            # for bytes that are already on disk, which is wasted bookkeeping for
+            # a short run and makes a run's outputs ambiguous to anything that
+            # identifies a file by its contents.
+            if metric is not None and (self.best_metric is None or self.cmp(metric, self.best_metric)):
+                self.best_epoch = epoch
+                self.best_metric = metric
+            return (None, None) if self.best_metric is None else (self.best_metric, self.best_epoch)
 
         worst_file = self.checkpoint_files[-1] if self.checkpoint_files else None
         if (

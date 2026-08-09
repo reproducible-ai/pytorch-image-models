@@ -372,6 +372,8 @@ group.add_argument('--val-interval', type=int, default=1, metavar='N',
                    help='how many epochs between validation and checkpointing')
 group.add_argument('--recovery-interval', type=int, default=0, metavar='N',
                    help='how many batches to wait before writing recovery checkpoint')
+group.add_argument('--save-last-only', action='store_true', default=False,
+                   help='Save only last.pth.tar; skip the checkpoint-<n>/model_best hardlink copies of it.')
 group.add_argument('--checkpoint-hist', type=int, default=10, metavar='N',
                    help='number of checkpoints to keep (default: 10)')
 group.add_argument('-j', '--workers', type=int, default=4, metavar='N',
@@ -1054,6 +1056,7 @@ def main():
             recovery_dir=output_dir,
             decreasing=decreasing_metric,
             max_history=args.checkpoint_hist,
+            save_last_only=args.save_last_only,
             task=task,
         )
         with open(os.path.join(output_dir, 'args.yaml'), 'w') as f:

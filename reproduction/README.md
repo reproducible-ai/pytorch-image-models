@@ -23,8 +23,8 @@ something honest to rebuild. Do not read the reported top-1 as a timm result.
 | step | command | produces |
 |---|---|---|
 | `fetch_dataset` | `python reproduction/fetch_fashion_mnist.py --data-dir ./data` | `data/FashionMNIST/raw/` |
-| `train` | `python train.py --data-dir ./data --dataset torch/fashion_mnist ... --epochs 5` then `python reproduction/prune_checkpoints.py` | `output/resnet18-fashion-mnist/model_best.pth.tar`, `summary.csv`, `args.yaml` |
-| `evaluate` | `python validate.py ... --checkpoint output/resnet18-fashion-mnist/model_best.pth.tar --results-file ./metrics/eval.json` | `metrics/eval.json` (held-out top-1 / top-5) |
+| `train` | `python train.py --data-dir ./data --dataset torch/fashion_mnist ... --epochs 5 --save-last-only` | `output/resnet18-fashion-mnist/last.pth.tar`, `summary.csv`, `args.yaml` |
+| `evaluate` | `python validate.py ... --checkpoint output/resnet18-fashion-mnist/last.pth.tar --results-file ./metrics/eval.json` | `metrics/eval.json` (held-out top-1 / top-5) |
 
 The exact, recorded commands live in
 [`.treqs/workflows/timm-resnet18-fashion-mnist.yaml`](../.treqs/workflows/timm-resnet18-fashion-mnist.yaml).
@@ -50,13 +50,16 @@ are required** to run any step, and the whole download is about 30 MB.
   `RuntimeError: output with shape [1, 28, 28] doesn't match the broadcast
   shape [3, 28, 28]`. The commands here pass `--mean 0.2860 --std 0.3530`
   (Fashion-MNIST statistics) rather than patching upstream.
-* **The training step prunes its own duplicate checkpoints.**
+* **`--save-last-only`** is a small addition to `train.py` in this fork.
   `timm.utils.CheckpointSaver` writes each epoch's state under three names —
-  `last.pth.tar`, `checkpoint-<epoch>.pth.tar` and `model_best.pth.tar` — as
-  `os.link()` hardlinks to one inode, so two of the three carry no information
-  the third does not. `reproduction/prune_checkpoints.py` runs at the end of the
-  training step and keeps only `model_best.pth.tar`, so the run leaves one file
-  per distinct set of weights.
+  `last.pth.tar`, `checkpoint-<epoch>.pth.tar` and, when the metric improves,
+  `model_best.pth.tar` — as `os.link()` hardlinks to a single inode. Two of the
+  three are therefore extra names for bytes already on disk, and any tool that
+  identifies a file by its contents sees one artifact under three paths. The new
+  flag skips both copies so a run leaves exactly one checkpoint file. The
+  published artifact is consequently `last.pth.tar`, the **final-epoch**
+  checkpoint, and it is the exact file the `evaluate` step scores — the reported
+  top-1 belongs to the weights that were published, not to some other epoch.
 * Nothing is installed with `pip install -e .`; `train.py` and `validate.py` are
   run from the repository root and import the checked-out `timm/` package
   directly.

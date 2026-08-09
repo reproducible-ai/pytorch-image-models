@@ -83,24 +83,24 @@ train:
   command: |
     export PATH=/opt/pytorch/bin:$PATH
     export TRACKIO_SPACE_ID=reproducible-ai/experiments PYTHONUNBUFFERED=1
-    roar run -n train --wandb-to-trackio -- bash -c "python train.py --data-dir ./data --dataset torch/fashion_mnist --train-split train --val-split validation --model resnet18 --num-classes 10 --in-chans 1 --img-size 28 --mean 0.2860 --std 0.3530 --batch-size 256 --epochs 5 --warmup-epochs 0 --opt sgd --lr 0.05 --weight-decay 5e-4 --sched cosine --workers 0 --seed 42 --checkpoint-hist 5 --output ./output --experiment resnet18-fashion-mnist && python reproduction/prune_checkpoints.py --dir ./output/resnet18-fashion-mnist --keep model_best.pth.tar"
+    roar run -n train --wandb-to-trackio -- python train.py --data-dir ./data --dataset torch/fashion_mnist --train-split train --val-split validation --model resnet18 --num-classes 10 --in-chans 1 --img-size 28 --mean 0.2860 --std 0.3530 --batch-size 256 --epochs 5 --warmup-epochs 0 --opt sgd --lr 0.05 --weight-decay 5e-4 --sched cosine --workers 0 --seed 42 --save-last-only --output ./output --experiment resnet18-fashion-mnist
   trace: off
 
 evaluate:
   command: |
     export PATH=/opt/pytorch/bin:$PATH
     export TRACKIO_SPACE_ID=reproducible-ai/experiments PYTHONUNBUFFERED=1
-    roar run -n evaluate --wandb-to-trackio -- python validate.py --data-dir ./data --dataset torch/fashion_mnist --split validation --model resnet18 --num-classes 10 --in-chans 1 --img-size 28 --mean 0.2860 --std 0.3530 --crop-pct 1.0 --batch-size 256 --workers 0 --checkpoint ./output/resnet18-fashion-mnist/model_best.pth.tar --results-file ./metrics/eval.json --results-format json
+    roar run -n evaluate --wandb-to-trackio -- python validate.py --data-dir ./data --dataset torch/fashion_mnist --split validation --model resnet18 --num-classes 10 --in-chans 1 --img-size 28 --mean 0.2860 --std 0.3530 --crop-pct 1.0 --batch-size 256 --workers 0 --checkpoint ./output/resnet18-fashion-mnist/last.pth.tar --results-file ./metrics/eval.json --results-format json
   trace: off
 
 label:
   command: |
     export PATH=/opt/pytorch/bin:$PATH
-    roar label set artifact output/resnet18-fashion-mnist/model_best.pth.tar model.name=timm-resnet18-fashion-mnist model.version=1 license.id=Apache-2.0 license.name='Apache License 2.0' description='ResNet-18 image classifier trained from scratch on Fashion-MNIST at 28x28 for 5 epochs with the timm training script — a deliberately TRUNCATED run, not a converged timm recipe.' documentation.url=https://github.com/reproducible-ai/pytorch-image-models/blob/main/reproduction/README.md
+    roar label set artifact output/resnet18-fashion-mnist/last.pth.tar model.name=timm-resnet18-fashion-mnist model.version=1 license.id=Apache-2.0 license.name='Apache License 2.0' description='ResNet-18 image classifier trained from scratch on Fashion-MNIST at 28x28 for 5 epochs with the timm training script — a deliberately TRUNCATED run, not a converged timm recipe.' documentation.url=https://github.com/reproducible-ai/pytorch-image-models/blob/main/reproduction/README.md
   trace: off
 
 publish:
   command: |
     export PATH=/opt/pytorch/bin:$PATH
-    roar put output/resnet18-fashion-mnist/model_best.pth.tar hf://reproducible-ai/timm-classifier --public --yes --no-tag -m "resnet18 trained from scratch on Fashion-MNIST (28px, 5 epochs, batch 256) with timm/train.py — TRUNCATED run, not converged; published with its held-out top-1 metrics"
+    roar put output/resnet18-fashion-mnist/last.pth.tar hf://reproducible-ai/timm-classifier --public --yes --no-tag -m "resnet18 trained from scratch on Fashion-MNIST (28px, 5 epochs, batch 256) with timm/train.py — TRUNCATED run, not converged; published with its held-out top-1 metrics"
   trace: off
