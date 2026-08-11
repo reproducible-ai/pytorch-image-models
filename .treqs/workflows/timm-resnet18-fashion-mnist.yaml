@@ -17,12 +17,20 @@ setup:
     # imports the checked-out ./timm package directly.
     python -m pip install --quiet -r requirements.txt \
       || sudo "$(command -v python)" -m pip install --quiet -r requirements.txt
+    # trackio backs roar's wandb->trackio alias. WITHOUT it the shim's
+    # `import trackio` fails, it silently falls back to the no-op wandb stub, and
+    # `--log-wandb` produces NOTHING while the run still exits 0 — the exact silent
+    # failure that left 8 of the first 10 rows with no experiment link. It has to
+    # live in the WORKLOAD interpreter: roar runs from its own uv tool venv, which
+    # train.py cannot import from.
+    python -m pip install --quiet trackio \
+      || sudo "$(command -v python)" -m pip install --quiet trackio
     rm -rf *.egg-info src/*.egg-info
     # Assert NO `timm` *distribution* is visible: if one were, the freeze would pin
     # a PyPI timm that is not the code being run.
     python -c "import importlib.metadata as m,sys; d=[x for x in m.distributions() if (x.metadata['Name'] or '').lower()=='timm']; print('timm distributions visible:', [x.version for x in d]); sys.exit(1 if d else 0)"
     python -c "import timm,os; p=os.path.abspath(timm.__file__); print('timm package ->', p, timm.__version__); assert p.startswith(os.getcwd()), 'timm resolved OUTSIDE the checkout'"
-    # --- roar: purge any host copy, then install the published 0.4.4rc2 ---------
+    # --- roar: purge any host copy, then install the published 0.4.4rc5 ---------
     # Purge is bigger than it looks: deleting only .dist-info leaves an importable
     # roar/ package dir behind and a bare /usr/local/bin/roar has been caught using
     # it. Never pipe rm into head — head exits, rm takes SIGPIPE and dies mid-list
@@ -37,8 +45,8 @@ setup:
                 /opt/pytorch/lib/python3.12/site-packages/roar_inject.pth
     # Build identity is the sha256, not the version string. Verify the published
     # linux x86_64 wheel's digest against the index before installing it.
-    curl -sS https://test.pypi.org/pypi/roar-cli/0.4.4rc2/json -o /tmp/roar_meta.json
-    python -c "import json,sys; d=json.load(open('/tmp/roar_meta.json')); g={f['filename']: f['digests']['sha256'] for f in d['urls']}; print(json.dumps(g, indent=1)); want='3677618d4c42d66143baf42912c8ed932f9706d5511d032bb2898fda6a465471'; sys.exit(0 if want in g.values() else 1)"
+    curl -sS https://test.pypi.org/pypi/roar-cli/0.4.4rc5/json -o /tmp/roar_meta.json
+    python -c "import json,sys; d=json.load(open('/tmp/roar_meta.json')); g={f['filename']: f['digests']['sha256'] for f in d['urls']}; print(json.dumps(g, indent=1)); want='ed35ed6bda3b5698ab65a887e7390c2ac073123f6d94bfa27b8282285352219c'; sys.exit(0 if want in g.values() else 1)"
     # `uv` is NOT on PATH on this AMI. Look in the usual per-user bin dirs first,
     # and bootstrap it if it genuinely is not installed.
     echo "user=$(id -un) home=$HOME"
@@ -50,13 +58,13 @@ setup:
     # declares it only under a `dev` extra and `roar put ... hf://` would otherwise
     # die *after* every traced step has already succeeded.
     # --index-strategy unsafe-best-match is REQUIRED: uv gives --extra-index-url
-    # first-match priority and otherwise reports "no version of roar-cli==0.4.4rc2".
+    # first-match priority and otherwise reports "no version of roar-cli==0.4.4rc5".
     uv tool install --python "$(python -c 'import sys; print(".".join(map(str, sys.version_info[:3])))')" \
       --force --with huggingface-hub \
       --index-url https://test.pypi.org/simple/ \
       --extra-index-url https://pypi.org/simple/ \
       --index-strategy unsafe-best-match \
-      roar-cli==0.4.4rc2
+      roar-cli==0.4.4rc5
     # The treqs agent shells out to a bare `roar` after the run WITHOUT this
     # stage's PATH, so the executable has to exist at /usr/local/bin/roar.
     ROAR_BIN="$(command -v roar || true)"
@@ -66,10 +74,14 @@ setup:
     sudo ln -sf "$ROAR_BIN" /usr/local/bin/roar
     hash -r
     roar --version
-    test "$(roar --version | grep -o '[0-9][^ ]*$')" = "0.4.4rc2" || { echo "WRONG ROAR: $(roar --version)"; exit 1; }
+    test "$(roar --version | grep -o '[0-9][^ ]*$')" = "0.4.4rc5" || { echo "WRONG ROAR: $(roar --version)"; exit 1; }
     roar tracer use preload
     roar tracer
     roar init || true
+    # HF_TOKEN is NOT in roar's default registration.omit.env_vars.names, so the
+    # token this workflow needs could otherwise be registered verbatim in the job
+    # metadata of a PUBLIC dag. Add it before anything is recorded.
+    roar config set registration.omit.env_vars.names "WANDB_API_KEY,OPENAI_API_KEY,ANTHROPIC_API_KEY,GITHUB_TOKEN,DATABASE_URL,AWS_SECRET_ACCESS_KEY,HF_TOKEN"
   trace: off
 
 fetch_dataset:
@@ -83,7 +95,19 @@ train:
   command: |
     export PATH=/opt/pytorch/bin:$PATH
     export TRACKIO_SPACE_ID=reproducible-ai/experiments PYTHONUNBUFFERED=1
-    roar run -n train --wandb-to-trackio -- python train.py --data-dir ./data --dataset torch/fashion_mnist --train-split train --val-split validation --model resnet18 --num-classes 10 --in-chans 1 --img-size 28 --mean 0.2860 --std 0.3530 --batch-size 256 --epochs 5 --warmup-epochs 0 --opt sgd --lr 0.05 --weight-decay 5e-4 --sched cosine --workers 0 --seed 42 --save-last-only --output ./output --experiment resnet18-fashion-mnist
+    # Fail BEFORE the GPU spends 10 minutes producing an empty dashboard. Without
+    # HF_TOKEN trackio buffers locally and never uploads, yet still writes space_id
+    # to its DB — so the run would publish a link to an empty project and exit 0.
+    test -n "$HF_TOKEN" || { echo "HF_TOKEN absent — trackio would local-fallback"; exit 1; }
+    echo "HF_TOKEN present (len=${#HF_TOKEN})"
+    python -c "import trackio; print('trackio', trackio.__version__)"
+    # --log-wandb is the flag timm gates ALL wandb logging behind (train.py:397,
+    # default False). --wandb-project is NOT optional alongside it: timm defaults it
+    # to None (train.py:399) and passes it straight through, but trackio.init's
+    # `project` is a required str — project=None dies `TypeError: 'NoneType' object
+    # is not iterable` inside init, killing the run before epoch 0. Verified against
+    # roar 0.4.4rc5 + trackio 0.34.0 before this ran on a GPU.
+    roar run -n train --wandb-to-trackio -- python train.py --data-dir ./data --dataset torch/fashion_mnist --train-split train --val-split validation --model resnet18 --num-classes 10 --in-chans 1 --img-size 28 --mean 0.2860 --std 0.3530 --batch-size 256 --epochs 5 --warmup-epochs 0 --opt sgd --lr 0.05 --weight-decay 5e-4 --sched cosine --workers 0 --seed 42 --save-last-only --output ./output --experiment resnet18-fashion-mnist --log-wandb --wandb-project resnet18-fashion-mnist
   trace: off
 
 evaluate:
