@@ -17,12 +17,6 @@ setup:
     # imports the checked-out ./timm package directly.
     python -m pip install --quiet -r requirements.txt \
       || sudo "$(command -v python)" -m pip install --quiet -r requirements.txt
-    # trackio backs roar's wandb->trackio alias. WITHOUT it the shim's
-    # `import trackio` fails, it silently falls back to the no-op wandb stub, and
-    # `--log-wandb` produces NOTHING while the run still exits 0 — the exact silent
-    # failure that left 8 of the first 10 rows with no experiment link. It has to
-    # live in the WORKLOAD interpreter: roar runs from its own uv tool venv, which
-    # train.py cannot import from.
     python -m pip install --quiet trackio \
       || sudo "$(command -v python)" -m pip install --quiet trackio
     rm -rf *.egg-info src/*.egg-info
